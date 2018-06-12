@@ -1,42 +1,51 @@
 #include "SST89x5x4.H"
 #include <string.h>
+#include "Absacc.h"
+
+#define C8255_A XBYTE[0x7C00]
+#define C8255_B XBYTE[0x7D00]
+#define C8255_C XBYTE[0x7E00]
+#define C8255_CON XBYTE[0x7F00]
 
 #define uchar unsigned char
 #define uint unsigned int
 
-#define TO_SECOND 20    //¶¨Ê±Æ÷¶¨³öÒ»ÃëµÄÒç³ö´ÎÊı
-#define CYCLE_NUM (Frequence+Period) //¶¨Ê±Æ÷¼ÆÊıÆ÷µÄÑ­»·ÖÜÆÚ
+#define TO_SECOND 20    //å®šæ—¶å™¨å®šå‡ºä¸€ç§’çš„æº¢å‡ºæ¬¡æ•°
+#define CYCLE_NUM (Frequence+Period) //å®šæ—¶å™¨è®¡æ•°å™¨çš„å¾ªç¯å‘¨æœŸ
 
-uint Frequence=10*TO_SECOND;      //½½Ë®¼ä¸ô
-uint Period=5*TO_SECOND;          //½½Ë®³ÖĞøÊ±¼ä
+uint Frequence=10*TO_SECOND;      //æµ‡æ°´é—´éš”
+uint Period=5*TO_SECOND;          //æµ‡æ°´æŒç»­æ—¶é—´
 
-sbit FAN=P1^1;      //·çÉÈio¿Ú
-sbit BEEP=P1^6;     //·äÃùÆ÷io¿Ú
+uchar DISBUFF[]={0x00,0x00,0x00,0x00,0x00,0x00};
+uchar KEY_DOWN=0;
 
-uint Time=0;       //Ê±¼ä¼ÆÊıÆ÷
+sbit FAN=P1^1;      //é£æ‰‡ioå£
+sbit BEEP=P1^6;     //èœ‚é¸£å™¨ioå£
 
-bit water_flag=0; //ÊÇ·ñÔÚ½½Ë®±êÖ¾Î»
+uint Time=0;       //æ—¶é—´è®¡æ•°å™¨
+
+bit water_flag=0; //æ˜¯å¦åœ¨æµ‡æ°´æ ‡å¿—ä½
 
 
-void UartInit(void)		//9600bps@11.0592MHz´®¿Ú³õÊ¼»¯
+void UartInit(void)		//9600bps@11.0592MHzä¸²å£åˆå§‹åŒ–
 {
-	PCON &= 0x7F;		//²¨ÌØÂÊ²»±¶ËÙ
-	SCON = 0x50;		//8Î»Êı¾İ,¿É±ä²¨ÌØÂÊ
-	TMOD &= 0x0F;		//Çå³ı¶¨Ê±Æ÷1Ä£Ê½Î»
-	TMOD |= 0x20;		//Éè¶¨¶¨Ê±Æ÷1Îª8Î»×Ô¶¯ÖØ×°·½Ê½
-	TL1 = 0xFD;		//Éè¶¨¶¨Ê±³õÖµ
-	TH1 = 0xFD;		//Éè¶¨¶¨Ê±Æ÷ÖØ×°Öµ
-	ET1 = 0;		//½ûÖ¹¶¨Ê±Æ÷1ÖĞ¶Ï
-	TR1 = 1;		//Æô¶¯¶¨Ê±Æ÷1
+	PCON &= 0x7F;		//æ³¢ç‰¹ç‡ä¸å€é€Ÿ
+	SCON = 0x50;		//8ä½æ•°æ®,å¯å˜æ³¢ç‰¹ç‡
+	TMOD &= 0x0F;		//æ¸…é™¤å®šæ—¶å™¨1æ¨¡å¼ä½
+	TMOD |= 0x20;		//è®¾å®šå®šæ—¶å™¨1ä¸º8ä½è‡ªåŠ¨é‡è£…æ–¹å¼
+	TL1 = 0xFD;		//è®¾å®šå®šæ—¶åˆå€¼
+	TH1 = 0xFD;		//è®¾å®šå®šæ—¶å™¨é‡è£…å€¼
+	ET1 = 0;		//ç¦æ­¢å®šæ—¶å™¨1ä¸­æ–­
+	TR1 = 1;		//å¯åŠ¨å®šæ—¶å™¨1
 }
 
-void Timer0Init(void)		//50ºÁÃë@11.0592MHz ¶¨Ê±Æ÷³õÊ¼»¯
+void Timer0Init(void)		//50æ¯«ç§’@11.0592MHz å®šæ—¶å™¨åˆå§‹åŒ–
 {
-	TMOD |= 0x01;		//ÉèÖÃ¶¨Ê±Æ÷Ä£Ê½
-	TL0 = 0x00;		//ÉèÖÃ¶¨Ê±³õÖµ
-	TH0 = 0x4C;		//ÉèÖÃ¶¨Ê±³õÖµ
-	TF0 = 0;		//Çå³ıTF0±êÖ¾
-	TR0 = 1;		//¶¨Ê±Æ÷0¿ªÊ¼¼ÆÊ±
+	TMOD |= 0x01;		//è®¾ç½®å®šæ—¶å™¨æ¨¡å¼
+	TL0 = 0x00;		//è®¾ç½®å®šæ—¶åˆå€¼
+	TH0 = 0x4C;		//è®¾ç½®å®šæ—¶åˆå€¼
+	TF0 = 0;		//æ¸…é™¤TF0æ ‡å¿—
+	TR0 = 1;		//å®šæ—¶å™¨0å¼€å§‹è®¡æ—¶
 }
 
 void delay(int a)
@@ -46,47 +55,47 @@ void delay(int a)
 		for(j=0;j<50;j++);
 }
 
-void Watering_on(void)  //¿ªÊ¼½½Ë®º¯Êı
+void Watering_on(void)  //å¼€å§‹æµ‡æ°´å‡½æ•°
 {
 	unsigned char L_value[8]={0x0E,0x0C,0x0D,0x09,0x0B,0x03,0x07,0x06};
 	uchar i=0,m=0;
 	for(i=0;i<3;i++){
-				for(m=0;m<7;m++)
-				{
-					P2&=0xF0; 
-					P2|=L_value[m];  //Ö»¸Ä±äÇ°ËÄÎ»
-					delay(10);
-				}
-			}
+		for(m=0;m<7;m++)
+		{
+			P2&=0xF0; 
+			P2|=L_value[m];  //åªæ”¹å˜å‰å››ä½
+			delay(10);
+		}
+	}
 	P2&=0xF0;
 }
 
-void Watering_off()    //½áÊø½½Ë®º¯Êı
+void Watering_off()    //ç»“æŸæµ‡æ°´å‡½æ•°
 {
 	unsigned char L_value[8]={0x0E,0x0C,0x0D,0x09,0x0B,0x03,0x07,0x06};
 	uchar i=0,m=0;
 	for(i=0;i<3;i++){
-				for(m=7;m>0;m--)
-				{
-					P2&=0xF0;
-					P2|=L_value[m]; 
-					delay(10);
-				}
-			}
+		for(m=7;m>0;m--)
+		{
 			P2&=0xF0;
+			P2|=L_value[m]; 
+			delay(10);
+		}
+	}
+	P2&=0xF0;
 }
 
-void Fanning_on()    //¿ª·çÉÈ
+void Fanning_on()    //å¼€é£æ‰‡
 {
 	FAN=1;
 }
 
-void Fanning_off()   //¹Ø·çÉÈ
+void Fanning_off()   //å…³é£æ‰‡
 {
 	FAN=0;
 }
 
-void Beep()      //·äÃùÆ÷
+void Beep()      //èœ‚é¸£å™¨
 {
 	uchar i=0;
 	for(i=0;i<200;i++){
@@ -98,18 +107,24 @@ void Beep()      //·äÃùÆ÷
 }
 
 
-void display(uchar i)  //µ¹¼ÆÊ±ÏÔÊ¾º¯Êı
+void display()  //å€’è®¡æ—¶æ˜¾ç¤ºå‡½æ•°
 {
-	uchar tab[]={0xFF,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90}; //¹²Ñô¼«Çı¶¯±í
-	P0=tab[i];  //È¡·´ºó¿ÉÇı¶¯¹²Òõ¼«
+	uchar i=0,j=0xCF;
+	for(;i<6;i++){
+			 	C8255_A=j;
+			 	C8255_B=DISBUFF[i];
+//				delay(1);
+				j=(j>>1)|(j<<7);
+			 }
 }
 
-void Timer0() interrupt 1  //¶¨Ê±Æ÷0ÖĞ¶Ïº¯Êı
+void Timer0() interrupt 1  //å®šæ—¶å™¨0ä¸­æ–­å‡½æ•°
 {	
+	uchar tab[]={0x00,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f};
 	uint temp=0;
-	TL0 = 0x00;		//ÉèÖÃ¶¨Ê±³õÖµ
-	TH0 = 0x4C;		//ÉèÖÃ¶¨Ê±³õÖµ
-	Time++; //ÖÜÆÚÎªCYCLE_NUMµÄÑ­»·
+	TL0 = 0x00;		//è®¾ç½®å®šæ—¶åˆå€¼
+	TH0 = 0x4C;		//è®¾ç½®å®šæ—¶åˆå€¼
+	Time++; //å‘¨æœŸä¸ºCYCLE_NUMçš„å¾ªç¯
 	if(Time==Frequence){
 		Watering_on();
 		water_flag=1;
@@ -117,7 +132,7 @@ void Timer0() interrupt 1  //¶¨Ê±Æ÷0ÖĞ¶Ïº¯Êı
 
 	if(water_flag){
 		if((Time-Frequence)%TO_SECOND==0){
-			display((Period-(Time-Frequence))/TO_SECOND);
+			DISBUFF[5]=tab[(Period-(Time-Frequence))/TO_SECOND];
 		}
 		if(Time==CYCLE_NUM){
 			Watering_off();
@@ -127,7 +142,7 @@ void Timer0() interrupt 1  //¶¨Ê±Æ÷0ÖĞ¶Ïº¯Êı
 	}
 }
 
-void U_send (char *ptr)   //´®¿Ú·¢ËÍº¯Êı
+void U_send (char *ptr)   //ä¸²å£å‘é€å‡½æ•°
 {
 	ES=0;
 	while(*ptr!='\0'){
@@ -138,7 +153,7 @@ void U_send (char *ptr)   //´®¿Ú·¢ËÍº¯Êı
 	ES=1;
 }
 
-void U_interrupt ()interrupt 4  //´®¿Ú½ÓÊÕº¯Êı
+void U_interrupt ()interrupt 4  //ä¸²å£æ¥æ”¶å‡½æ•°
 {
 	char *symbol_water="water";
 	char *symbol_fan="fan";
@@ -154,7 +169,7 @@ void U_interrupt ()interrupt 4  //´®¿Ú½ÓÊÕº¯Êı
 			receive_data[flag++]=SBUF;
 		}
 		else{
-			if(flag==strlen(symbol_water)){  //¿ØÖÆ½½Ë®
+			if(flag==strlen(symbol_water)){  //æ§åˆ¶æµ‡æ°´
 				for(i=0;i<flag;i++){
 					if(symbol_water[i]!=receive_data[i])
 						break;
@@ -164,7 +179,7 @@ void U_interrupt ()interrupt 4  //´®¿Ú½ÓÊÕº¯Êı
 					Time=Frequence-1;
 				}
 			}
-			if(flag==strlen(symbol_fan)){  //¿ØÖÆ¿ª·çÉÈ
+			if(flag==strlen(symbol_fan)){  //æ§åˆ¶å¼€é£æ‰‡
 				for(i=0;i<flag;i++){
 					if(symbol_fan[i]!=receive_data[i])
 						break;
@@ -176,7 +191,7 @@ void U_interrupt ()interrupt 4  //´®¿Ú½ÓÊÕº¯Êı
 				}
 			}
 			
-			if(flag==strlen(symbol_cfan)){  // ¿ØÖÆ¹Ø·çÉÈ
+			if(flag==strlen(symbol_cfan)){  // æ§åˆ¶å…³é£æ‰‡
 				for(i=0;i<flag;i++){
 					if(symbol_cfan[i]!=receive_data[i])
 						break;
@@ -191,7 +206,7 @@ void U_interrupt ()interrupt 4  //´®¿Ú½ÓÊÕº¯Êı
 	}
 }
 
-void INT0_water() interrupt 0  //Íâ²¿ÖĞ¶Ï0ÖĞ¶Ïº¯Êı
+void INT0_water() interrupt 0  //å¤–éƒ¨ä¸­æ–­0ä¸­æ–­å‡½æ•°
 {
 	if(!water_flag){
 		Time=Frequence-1;
@@ -200,23 +215,28 @@ void INT0_water() interrupt 0  //Íâ²¿ÖĞ¶Ï0ÖĞ¶Ïº¯Êı
 
 void main()
 {
-	//³õÊ¼»¯²¿·Ö
-	P2=0x00;//IO¿Ú³õÊ¼»¯
+	//åˆå§‹åŒ–éƒ¨åˆ†
+	P2=0x00;//IOå£åˆå§‹åŒ–
 	FAN=0;
 	BEEP=0;
 
-	EA=1; //ÖĞ¶ÏÔÊĞíÎ»³õÊ¼»¯
+	EA=1; //ä¸­æ–­å…è®¸ä½åˆå§‹åŒ–
 	ES=1;
 	ET0=1;
 	EX0=1;
 	IT0=1;
 
-	PX0=1; //ÖĞ¶ÏÓÅÏÈ¼¶³õÊ¼»¯
+	PX0=1; //ä¸­æ–­ä¼˜å…ˆçº§åˆå§‹åŒ–
 	PT0=1;
 	PS=0;
 
-	Timer0Init(); //´®¿ÚºÍ¶¨Ê±Æ÷³õÊ¼»¯
+	C8255_CON=0x81;	 //8255åˆå§‹åŒ–
+
+	Timer0Init(); //ä¸²å£å’Œå®šæ—¶å™¨åˆå§‹åŒ–
 	UartInit();
 
-	while(1);
+	while(1){
+		display();
+
+	}
 }
